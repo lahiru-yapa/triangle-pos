@@ -2,6 +2,7 @@
 
 namespace Modules\Sale\Http\Controllers;
 
+use Exception;
 use Gloudemans\Shoppingcart\Facades\Cart;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\Request;
@@ -18,7 +19,8 @@ use Modules\Sale\Http\Requests\StorePosSaleRequest;
 class PosController extends Controller
 {
 
-    public function index() {
+    public function index()
+    {
         Cart::instance('sale')->destroy();
 
         $customers = Customer::all();
@@ -28,8 +30,10 @@ class PosController extends Controller
     }
 
 
-    public function store(StorePosSaleRequest $request) {
-        DB::transaction(function () use ($request) {
+    public function store(StorePosSaleRequest $request)
+    {
+        DB::beginTransaction();
+        try {
             $due_amount = $request->total_amount - $request->paid_amount;
 
             if ($due_amount == $request->total_amount) {
@@ -85,16 +89,16 @@ class PosController extends Controller
             if ($sale->paid_amount > 0) {
                 SalePayment::create([
                     'date' => now()->format('Y-m-d'),
-                    'reference' => 'INV/'.$sale->reference,
+                    'reference' => 'INV/' . $sale->reference,
                     'amount' => $sale->paid_amount,
                     'sale_id' => $sale->id,
                     'payment_method' => $request->payment_method
                 ]);
             }
-        });
-
-        toast('POS Sale Created!', 'success');
-
-        return redirect()->route('sales.index');
+            DB::commit();
+            return redirect()->route('sales.pos.pdf', $sale->id);
+        } catch (Exception $e) {
+            DB::rollBack();
+        }
     }
 }
